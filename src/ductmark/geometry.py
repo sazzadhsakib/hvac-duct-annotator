@@ -50,6 +50,7 @@ def pair_walls(
     angle_tol: float = 1.5,
     min_overlap: float = 18.0,
     block_cover: float = 0.5,
+    liner: float = 4.0,
 ) -> list[Run]:
     """Pair near-parallel wall segments into duct pieces.
 
@@ -89,7 +90,7 @@ def pair_walls(
             i = rows[r]
             # Another wall strictly between the pair (liners hugging a wall excepted) blocks it.
             side = off[r] * np.sign(off[r, j])
-            between = (side > min_gap) & (side < gap[r, j] - min_gap)
+            between = (side > liner) & (side < gap[r, j] - liner)
             cover = np.minimum(hi[r, j], np.maximum(s0[r], s1[r])) - np.maximum(lo[r, j], np.minimum(s0[r], s1[r]))
             if np.any(parallel[r] & between & (cover >= block_cover * (hi[r, j] - lo[r, j]))):
                 continue

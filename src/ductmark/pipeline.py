@@ -6,12 +6,15 @@ import pymupdf
 
 from .classify import assign_systems, find_terminals
 from .geometry import Run, merge_collinear, neighbors, overlap, pair_walls, side_by_side
-from .labels import DuctSize, has_size_mark, infer_scale, parse_scale, pick, scale_notes, size_readings
+from .labels import MAX_SIZE, MIN_SIZE, DuctSize, has_size_mark, infer_scale, parse_scale, pick, scale_notes, size_readings
 from .ocr import TextBox, ocr_vector_text, page_words
 from .vector import dark_segments
 
 BESIDE = 12.0  # pt; how far outside a duct wall a size label may sit
 AMBIGUOUS = 2.0  # pt; runs whose fit to a label differs by less than this are indistinguishable
+# Real sizes in inches, converted to paper with the drawing scale once it is known.
+MIN_STRAIGHT = 12  # shortest straight run to pair
+SYMBOL_SIDES = (8, 54)  # riser and air-device boxes
 
 
 @dataclass
@@ -34,7 +37,13 @@ class Takeoff:
 
 def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
     segs = dark_segments(page)
-    runs = merge_collinear(pair_walls(segs))
+    limits = {}
+    if scale:
+        # Pairing precedes scale inference, so only a given scale can set the duct width range;
+        # otherwise the paper-point defaults (about 3"-53" at 1/4"=1'-0") apply.
+        ppi = parse_scale(scale)
+        limits = {"min_gap": 0.9 * MIN_SIZE * ppi, "max_gap": 1.1 * MAX_SIZE * ppi, "min_overlap": MIN_STRAIGHT * ppi}
+    runs = merge_collinear(pair_walls(segs, **limits))
 
     words = page_words(page)
     if sum(has_size_mark(w.text) for w in words if size_readings(w.text)) < 2:
@@ -82,7 +91,8 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
         size, source, text = accepted[i]
         ducts.append(Duct(f"D{n}", run, size, source, text, run.width / ppi, run.length / ppi / 12))
 
-    systems = assign_systems([d.run for d in ducts], find_terminals(segs))
+    sides = [side * ppi for side in SYMBOL_SIDES]
+    systems = assign_systems([d.run for d in ducts], find_terminals(segs, *sides))
     for duct, system in zip(ducts, systems):
         duct.system = system
     return Takeoff(ducts, scale_name)

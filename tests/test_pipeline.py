@@ -143,3 +143,33 @@ def test_bare_numbers_need_confirmed_ductwork(callouts):
         169: ('10"ø', "label"),  # bare number on a branch of labelled ductwork
         256: ('8"ø', "label"),  # the explicit label beats the "7" callout
     }  # the "150" table cell is not a duct
+
+
+def scaled_drawing(ppi, inches):
+    """A labelled duct of the given size plus a 12" one, drawn at the given scale."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=1400, height=700)
+    for y, size in ((100, inches), (450, 12)):
+        width = size * ppi
+        page.draw_line((200, y), (1100, y), width=1.44)
+        page.draw_line((200, y + width), (1100, y + width), width=1.44)
+        page.insert_text((600, y + width / 2 + 3), f'{size}"ø', fontsize=8)
+    return doc, page
+
+
+@pytest.mark.parametrize("scale, ppi, inches", [("1/2\"=1'-0\"", 3.0, 36), ("1/8\"=1'-0\"", 0.75, 4)])
+def test_given_scale_sets_the_duct_width_range(scale, ppi, inches):
+    # 36" at 1/2" is 108 pt and 4" at 1/8" is 3 pt: both outside the 4-80 pt paper defaults.
+    doc, page = scaled_drawing(ppi, inches)
+    assert sorted(str(d.size) for d in detect(page, scale).ducts) == sorted([f'{inches}"ø', '12"ø'])
+    doc.close()
+
+
+def test_riser_box_size_follows_the_scale():
+    doc, page = scaled_drawing(3.0, 36)
+    page.draw_rect(pymupdf.Rect(92, 100, 200, 208), width=1.44)  # 36" riser box at the duct's end
+    page.draw_line((92, 100), (200, 208), width=1.44)
+    page.draw_line((92, 208), (200, 100), width=1.44)
+    systems = {str(d.size): d.system for d in detect(page, "1/2\"=1'-0\"").ducts}
+    assert systems['36"ø'] == "supply"
+    doc.close()
