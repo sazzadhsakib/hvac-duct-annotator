@@ -126,7 +126,7 @@ def neighbors(runs: list[Run], reach: float = 2.5, angle_tol: float = 10.0) -> d
             limit = reach * max(a.width, b.width)
             if _parallel(a, b, angle_tol):
                 # Side-by-side parallel runs are not connected; only end-to-end jogs are.
-                if _axial_gap(a, b) < 0:
+                if side_by_side(a, b, angle_tol):
                     continue
                 d = min(np.hypot(*np.subtract(p, q)) for p in (a.p0, a.p1) for q in (b.p0, b.p1))
             else:
@@ -135,6 +135,10 @@ def neighbors(runs: list[Run], reach: float = 2.5, angle_tol: float = 10.0) -> d
                 adj[i].append(j)
                 adj[j].append(i)
     return adj
+
+
+def side_by_side(a: Run, b: Run, angle_tol: float = 10.0) -> bool:
+    return _parallel(a, b, angle_tol) and _axial_gap(a, b) < 0
 
 
 def _mergeable(a: Run, b: Run, width_tol: float, gap_factor: float, angle_tol: float) -> bool:
@@ -151,9 +155,19 @@ def _parallel(a: Run, b: Run, tol: float) -> bool:
     return min(d, 180 - d) <= tol
 
 
+def overlap(a: Run, b: Run) -> float:
+    """Length of b's projection that falls within a."""
+    s0, s1 = _span(a, b)
+    return max(0.0, min(a.length, s1) - max(0.0, s0))
+
+
 def _axial_gap(a: Run, b: Run) -> float:
-    s = sorted((np.subtract(p, a.p0) @ a.direction for p in (b.p0, b.p1)))
-    return max(s[0] - a.length, -s[1])
+    s0, s1 = _span(a, b)
+    return max(s0 - a.length, -s1)
+
+
+def _span(a: Run, b: Run) -> list[float]:
+    return sorted(float(np.subtract(p, a.p0) @ a.direction) for p in (b.p0, b.p1))
 
 
 def _combine(group: list[Run]) -> Run:
