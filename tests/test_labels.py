@@ -56,8 +56,11 @@ def test_infer_scale_needs_agreement():
 
 
 QUARTER, EIGHTH = "1/4\"=1'-0\"", "1/8\"=1'-0\""
-# 8" and 12" read at 1/4"=1'-0", or 16" and 24" read at 1/8"=1'-0": two votes each.
-TIED = [([DuctSize(8)], 12.0), ([DuctSize(12)], 18.0), ([DuctSize(16)], 12.0), ([DuctSize(24)], 18.0)]
+# 8", 12" and 14" read at 1/4"=1'-0", or 16", 24" and 28" read at 1/8"=1'-0": three votes each.
+TIED = [
+    ([DuctSize(8)], 12.0), ([DuctSize(12)], 18.0), ([DuctSize(14)], 21.0),
+    ([DuctSize(16)], 12.0), ([DuctSize(24)], 18.0), ([DuctSize(28)], 21.0),
+]
 
 
 def test_tied_scale_votes_are_rejected():
@@ -67,7 +70,14 @@ def test_tied_scale_votes_are_rejected():
 
 def test_narrow_scale_lead_is_rejected():
     with pytest.raises(ValueError, match="fit both"):
-        infer_scale(TIED + [([DuctSize(10)], 15.0)])  # 3 votes to 2
+        infer_scale(TIED + [([DuctSize(10)], 15.0)])  # 4 votes to 3
+
+
+def test_two_labels_need_the_sheet_scale_to_agree():
+    obs = [([DuctSize(8)], 12.0), ([DuctSize(12)], 18.0)]
+    with pytest.raises(ValueError, match="too few"):
+        infer_scale(obs)
+    assert infer_scale(obs, notes=[QUARTER]) == (QUARTER, 1.5)
 
 
 def test_scale_noted_on_the_sheet_settles_a_tie():

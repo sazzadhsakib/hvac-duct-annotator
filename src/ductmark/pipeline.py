@@ -61,10 +61,13 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
     if scale:
         scale_name, ppi = scale, parse_scale(scale)
     else:
+        # Ceiling grids, hatching and flex ribs hold text by accident; only labels in duct-like
+        # runs vote.
+        stacked = _stacked(runs, same_width=True)
         inside = []
         for b in marked:
             gap, i = min((r.distance(b.center) - r.width / 2, i) for i, r in enumerate(runs))
-            if gap <= 0:
+            if gap <= 0 and i not in stacked:
                 inside.append((size_readings(b.text), runs[i].width))
         scale_name, ppi = infer_scale(inside, scale_notes([page.get_text(), *(w.text for w in words)]))
 
@@ -184,8 +187,12 @@ def _covered(run: Run, runs: list[Run], accepted: dict[int, tuple]) -> bool:
     return any(runs[k].distance(run.midpoint) < runs[k].width / 2 and runs[k].width > run.width for k in accepted)
 
 
-def _stacked(runs: list[Run]) -> set[int]:
-    """Runs sharing a wall with an overlapping parallel run: flex ribs and hatching, not ducts."""
+def _stacked(runs: list[Run], same_width: bool = False) -> set[int]:
+    """Runs sharing a wall with an overlapping parallel run: flex ribs and hatching, not ducts.
+
+    With same_width, only repeated cells of equal width count (ceiling grids, ribs), so a duct
+    running beside another duct is not caught by the gap between them.
+    """
     by_wall: dict[int, list[int]] = {}
     for i, r in enumerate(runs):
         for w in r.walls:
@@ -195,6 +202,6 @@ def _stacked(runs: list[Run]) -> set[int]:
         for i in members:
             for j in members:
                 a, b = runs[i], runs[j]
-                if i < j and side_by_side(a, b) and overlap(a, b) >= 0.5 * max(a.length, b.length):
+                if i < j and (not same_width or _same_width(a, b)) and side_by_side(a, b) and overlap(a, b) >= 0.5 * max(a.length, b.length):
                     out.update((i, j))
     return out

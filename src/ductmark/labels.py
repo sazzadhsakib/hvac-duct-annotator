@@ -101,12 +101,13 @@ def scale_notes(texts) -> list[str]:
     return notes
 
 
-def infer_scale(observations: list[tuple[list[DuctSize], float]], notes: list[str] = (), min_votes: int = 2) -> tuple[str, float]:
+def infer_scale(observations: list[tuple[list[DuctSize], float]], notes: list[str] = (), min_votes: int = 3) -> tuple[str, float]:
     """Pick the scale under which the most labels agree with their measured wall gaps.
 
     observations: (size readings of a label, wall gap in points of the run it sits in).
-    A scale noted on the sheet must be among the best supported and then settles a tie; without
-    one, the winner needs twice the votes of the runner-up. Anything less raises.
+    A scale noted on the sheet must be among the best supported, needs two agreeing labels and
+    settles a tie. Without one, the winner needs min_votes labels and twice the votes of the
+    runner-up. Anything less raises.
     """
     names = {round(ppi, 6): name for name, ppi in STANDARD_SCALES.items()}
     noted = []
@@ -116,7 +117,7 @@ def infer_scale(observations: list[tuple[list[DuctSize], float]], notes: list[st
         noted.append(ppi)
     votes = {ppi: sum(pick(readings, gap_pt / ppi) is not None for readings, gap_pt in observations) for ppi in names}
     best, second = sorted(votes, key=votes.get, reverse=True)[:2]
-    if votes[best] < min_votes:
+    if votes[best] < (2 if noted else min_votes):
         raise ValueError("too few duct labels to infer the drawing scale; pass --scale")
     if noted:
         agreeing = {ppi for ppi in noted if votes[ppi] == votes[best]}

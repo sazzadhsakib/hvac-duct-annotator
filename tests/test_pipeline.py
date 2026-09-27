@@ -77,7 +77,7 @@ def test_gap_between_adjacent_ducts_is_not_grown_into():
 def drawing():
     doc = pymupdf.open()
     page = doc.new_page(width=800, height=400)
-    for y, width, label in ((100, 18, '12"ø'), (250, 12, '8"ø')):
+    for y, width, label in ((100, 18, '12"ø'), (250, 12, '8"ø'), (330, 15, '10"ø')):
         page.draw_line((100, y), (600, y), width=1.44)
         page.draw_line((100, y + width), (600, y + width), width=1.44)
         page.insert_text((330, y + width / 2 + 3), label, fontsize=8)
@@ -89,7 +89,7 @@ def test_text_layer_drawing_end_to_end(drawing, tmp_path):
     doc, page = drawing
     takeoff = detect(page)
     assert takeoff.scale == "1/4\"=1'-0\""
-    assert [(str(d.size), round(d.length_ft, 1)) for d in takeoff.ducts] == [('12"ø', 27.8), ('8"ø', 27.8)]
+    assert [(str(d.size), round(d.length_ft, 1)) for d in takeoff.ducts] == [('12"ø', 27.8), ('8"ø', 27.8), ('10"ø', 27.8)]
 
     annotate(page, takeoff)
     pdf, png, report = save(doc, page, takeoff, tmp_path, "plan")
@@ -99,6 +99,7 @@ def test_text_layer_drawing_end_to_end(drawing, tmp_path):
     assert [(r["id"], r["size"], r["length"], r["source"]) for r in rows] == [
         ("D1", '12"ø', "27'-9\"", "label"),
         ("D2", '8"ø', "27'-9\"", "label"),
+        ("D3", '10"ø', "27'-9\"", "label"),
     ]
 
 
@@ -108,7 +109,7 @@ def test_explicit_scale_overrides_a_disagreeing_sheet_note(drawing):
     with pytest.raises(ValueError, match="sheet notes"):
         detect(page)
     takeoff = detect(page, scale="1/4\"=1'-0\"")
-    assert [str(d.size) for d in takeoff.ducts] == ['12"ø', '8"ø']
+    assert [str(d.size) for d in takeoff.ducts] == ['12"ø', '8"ø', '10"ø']
 
 
 def test_scale_that_no_label_agrees_with_is_rejected(drawing):
@@ -137,7 +138,7 @@ def callouts():
 
 
 def test_bare_numbers_need_confirmed_ductwork(callouts):
-    ducts = {round(d.run.midpoint[1]): (str(d.size), d.source) for d in detect(callouts).ducts}
+    ducts = {round(d.run.midpoint[1]): (str(d.size), d.source) for d in detect(callouts, "1/4\"=1'-0\"").ducts}
     assert ducts == {
         109: ('12"ø', "label"),
         169: ('10"ø', "label"),  # bare number on a branch of labelled ductwork
@@ -172,4 +173,18 @@ def test_riser_box_size_follows_the_scale():
     page.draw_line((92, 208), (200, 100), width=1.44)
     systems = {str(d.size): d.system for d in detect(page, "1/2\"=1'-0\"").ducts}
     assert systems['36"ø'] == "supply"
+    doc.close()
+
+
+def test_labels_in_grid_cells_do_not_set_the_scale():
+    # 8"x8" callouts in a 2 ft ceiling grid drawn at 1/4"=1'-0": each 36 pt cell would read as an
+    # 8" duct at 3/4"=1'-0", so letting grid cells vote picks the wrong scale.
+    doc = pymupdf.open()
+    page = doc.new_page(width=800, height=400)
+    for y in (100, 136, 172, 208):
+        page.draw_line((100, y), (600, y), width=1.44)
+    for y in (122, 158, 194):
+        page.insert_text((330, y), '8"x8"', fontsize=8)
+    with pytest.raises(ValueError, match="too few"):
+        detect(page)
     doc.close()
