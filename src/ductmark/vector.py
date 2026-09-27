@@ -1,6 +1,9 @@
 import numpy as np
 import pymupdf
 
+# MEP work is drawn dark over a screened-grey architectural background.
+MAX_LUMA = 0.25
+
 
 def load_page(path: str, index: int = 0) -> tuple[pymupdf.Document, pymupdf.Page]:
     doc = pymupdf.open(path)
@@ -11,7 +14,7 @@ def load_page(path: str, index: int = 0) -> tuple[pymupdf.Document, pymupdf.Page
     return doc, page
 
 
-def dark_segments(page: pymupdf.Page, max_luma: float = 0.25, min_len: float = 9.0) -> np.ndarray:
+def dark_segments(page: pymupdf.Page, max_luma: float = MAX_LUMA, min_len: float = 9.0) -> np.ndarray:
     """Straight stroked edges as rows of [x0, y0, x1, y1, lineweight] in page points."""
     rows = []
     for path in page.get_drawings():

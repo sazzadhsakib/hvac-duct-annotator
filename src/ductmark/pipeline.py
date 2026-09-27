@@ -8,7 +8,7 @@ from .classify import assign_systems, find_terminals
 from .geometry import Run, merge_collinear, neighbors, overlap, pair_walls, side_by_side
 from .labels import MAX_SIZE, MIN_SIZE, DuctSize, has_size_mark, infer_scale, parse_scale, pick, scale_notes, size_readings
 from .ocr import TextBox, ocr_vector_text, page_words
-from .vector import dark_segments
+from .vector import MAX_LUMA, dark_segments
 
 BESIDE = 12.0  # pt; how far outside a duct wall a size label may sit
 AMBIGUOUS = 2.0  # pt; runs whose fit to a label differs by less than this are indistinguishable
@@ -35,8 +35,8 @@ class Takeoff:
     scale: str
 
 
-def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
-    segs = dark_segments(page)
+def detect(page: pymupdf.Page, scale: str | None = None, max_luma: float = MAX_LUMA) -> Takeoff:
+    segs = dark_segments(page, max_luma)
     limits = {}
     if scale:
         # Pairing precedes scale inference, so only a given scale can set the duct width range;

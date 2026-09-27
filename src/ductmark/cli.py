@@ -6,7 +6,7 @@ import pymupdf
 
 from .annotate import annotate, describe, save
 from .pipeline import detect
-from .vector import load_page
+from .vector import MAX_LUMA, load_page
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -16,11 +16,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--page", type=int, default=0, help="0-based page index (default: 0)")
     parser.add_argument("--scale", help="drawing scale such as 1/4\"=1'-0\"; inferred from duct labels if omitted")
     parser.add_argument("--dpi", type=int, default=150, help="PNG resolution (default: 150)")
+    parser.add_argument(
+        "--max-luma", type=float, default=MAX_LUMA,
+        help=f"lightest stroke (0-1) read as duct geometry; raise it for ducts drawn in colour (default: {MAX_LUMA})",
+    )
     args = parser.parse_args(argv)
 
     try:
         doc, page = load_page(str(args.pdf), args.page)
-        takeoff = detect(page, args.scale)
+        takeoff = detect(page, args.scale, args.max_luma)
     except (pymupdf.FileNotFoundError, pymupdf.FileDataError, IndexError, ValueError) as e:
         sys.exit(f"ductmark: {e}")
 

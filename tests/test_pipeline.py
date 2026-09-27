@@ -188,3 +188,17 @@ def test_labels_in_grid_cells_do_not_set_the_scale():
     with pytest.raises(ValueError, match="too few"):
         detect(page)
     doc.close()
+
+
+def test_ducts_drawn_in_colour_need_a_higher_luma_cut_off():
+    doc = pymupdf.open()
+    page = doc.new_page(width=800, height=500)
+    blue = (0, 0.36, 0.72)  # luma 0.29, just above the default cut-off
+    for y, width, label in ((100, 18, '12"ø'), (250, 12, '8"ø'), (360, 15, '10"ø')):
+        page.draw_line((100, y), (600, y), color=blue, width=1.44)
+        page.draw_line((100, y + width), (600, y + width), color=blue, width=1.44)
+        page.insert_text((330, y + width / 2 + 3), label, fontsize=8)
+    with pytest.raises(ValueError):
+        detect(page)
+    assert [str(d.size) for d in detect(page, max_luma=0.35).ducts] == ['12"ø', '8"ø', '10"ø']
+    doc.close()
