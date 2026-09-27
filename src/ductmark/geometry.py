@@ -117,21 +117,22 @@ def merge_collinear(
     return [_combine(g) for g in groups.values()]
 
 
-def neighbors(runs: list[Run], reach: float = 2.5, angle_tol: float = 10.0) -> dict[int, list[int]]:
-    """Runs whose ends meet across a fitting gap (elbow, tee, transition) of up to reach x width."""
+def neighbors(runs: list[Run], reach: float = 2.0, angle_tol: float = 10.0) -> dict[int, list[int]]:
+    """Runs joined by a fitting (elbow, tee, transition).
+
+    A run end connects to another run when the gap from that end to the other run's wall is at
+    most `reach` times the approaching run's own width; a branch stopping short of a wide trunk
+    is not joined to it.
+    """
     adj: dict[int, list[int]] = {i: [] for i in range(len(runs))}
     for i, a in enumerate(runs):
         for j in range(i + 1, len(runs)):
             b = runs[j]
-            limit = reach * max(a.width, b.width)
-            if _parallel(a, b, angle_tol):
-                # Side-by-side parallel runs are not connected; only end-to-end jogs are.
-                if side_by_side(a, b, angle_tol):
-                    continue
-                d = min(np.hypot(*np.subtract(p, q)) for p in (a.p0, a.p1) for q in (b.p0, b.p1))
-            else:
-                d = min(a.distance(b.p0), a.distance(b.p1), b.distance(a.p0), b.distance(a.p1))
-            if d <= limit:
+            # Side-by-side parallel runs are not connected; only end-to-end jogs are.
+            if side_by_side(a, b, angle_tol):
+                continue
+            ends = [(p, a, b) for p in (a.p0, a.p1)] + [(p, b, a) for p in (b.p0, b.p1)]
+            if any(other.distance(p) - other.width / 2 <= reach * own.width for p, own, other in ends):
                 adj[i].append(j)
                 adj[j].append(i)
     return adj

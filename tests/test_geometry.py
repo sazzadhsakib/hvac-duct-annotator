@@ -85,3 +85,9 @@ def test_elbow_and_tee_are_connected():
 def test_side_by_side_runs_are_not_connected():
     runs = [run((0, 0), (200, 0)), run((0, 20), (200, 20))]
     assert neighbors(runs) == {0: [], 1: []}
+
+
+def test_branch_stopping_short_of_wide_trunk_is_not_connected():
+    trunk = run((0, 0), (300, 0), 27)
+    stub = run((150, 60), (150, 100), 15)
+    assert neighbors([trunk, stub]) == {0: [], 1: []}
