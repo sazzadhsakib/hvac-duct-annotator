@@ -35,7 +35,7 @@ def size_readings(text: str) -> list[DuctSize]:
         sizes = [DuctSize(int(m[1]), int(m[2]))]
     elif m := _QUOTED.fullmatch(t) or _DIAMETER.fullmatch(t):
         sizes = [DuctSize(int(m[1]))]
-    elif t.isdigit() and len(t) <= 4:
+    elif t.isascii() and t.isdigit() and len(t) <= 4:
         # Bare digits: the inch mark and/or ø were read as digits ("80", "140", "8110"),
         # so the real size is a prefix. The measured width decides later.
         prefixes = [t] if len(t) <= 2 else []
