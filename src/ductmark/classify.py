@@ -46,28 +46,55 @@ def find_terminals(segs: np.ndarray, min_side: float = 12.0, max_side: float = 8
 def assign_systems(runs: list[Run], terminals: list[Terminal], touch: float = 3.0) -> list[str]:
     """Label runs supply/return from the symbols they physically meet, spread through the duct graph.
 
-    Only symbols touching a run end count (risers and inline boxes). Air devices hung off flex sit
-    too far from their branch to attach reliably, so runs no touching symbol reaches stay
+    Only symbols touching a run end seed a system (risers and inline boxes); air devices hung off
+    flex sit too far from their branch to attach reliably. Each run takes the system of the nearest
+    seed in hops. A run no seed reaches, or one equally near a supply and a return seed, stays
     unclassified rather than guessed.
     """
-    seeds: dict[int, tuple[float, str]] = {}
-    for t in terminals:
-        for i, r in enumerate(runs):
-            dist = min(t.distance(r.p0), t.distance(r.p1))
-            if dist <= max(touch, 0.25 * r.width) and (i not in seeds or dist < seeds[i][0]):
-                seeds[i] = (dist, t.system)
-    system = {i: s for i, (_, s) in seeds.items()}
-    adj = neighbors(runs)
-    queue = deque(system)
+    adj = {i: [j for j in js if not _through_symbol(runs[i], runs[j], terminals)] for i, js in neighbors(runs).items()}
+    hops = {}
+    for system in ("supply", "return"):
+        seeds = [
+            i for i, r in enumerate(runs)
+            if any(t.system == system and min(t.distance(r.p0), t.distance(r.p1)) <= max(touch, 0.25 * r.width) for t in terminals)
+        ]
+        hops[system] = _hops(adj, seeds)
+
+    out = []
+    for i in range(len(runs)):
+        s, r = hops["supply"].get(i, np.inf), hops["return"].get(i, np.inf)
+        out.append("supply" if s < r else "return" if r < s else "unclassified")
+    return out
+
+
+def _hops(adj: dict[int, list[int]], seeds: list[int]) -> dict[int, int]:
+    dist = dict.fromkeys(seeds, 0)
+    queue = deque(seeds)
     while queue:
         i = queue.popleft()
         for j in adj[i]:
-            if j not in system:
-                system[j] = system[i]
+            if j not in dist:
+                dist[j] = dist[i] + 1
                 queue.append(j)
-    return [system.get(i, "unclassified") for i in range(len(runs))]
+    return dist
 
 
+def _through_symbol(a: Run, b: Run, terminals: list[Terminal], inset: float = 1.0) -> bool:
+    """True if the shortest link between two runs crosses a riser or device box.
+
+    A duct ends at such a box, so two runs on either side of one are not joined to each other.
+    """
+    ends = [(p, b) for p in (a.p0, a.p1)] + [(p, a) for p in (b.p0, b.p1)]
+    p, other = min(ends, key=lambda e: e[1].distance(e[0]))
+    p = np.asarray(p)
+    q = other.closest(p)
+    pts = p + np.linspace(0, 1, int(np.hypot(*(q - p))) + 2)[:, None] * (q - p)
+    for t in terminals:
+        x0, y0, x1, y1 = t.box
+        inside = (pts[:, 0] > x0 + inset) & (pts[:, 0] < x1 - inset) & (pts[:, 1] > y0 + inset) & (pts[:, 1] < y1 - inset)
+        if inside.any():
+            return True
+    return False
 def _has_box(segs: np.ndarray, box, tol: float) -> bool:
     x0, y0, x1, y1 = box
     corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]

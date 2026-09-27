@@ -42,3 +42,28 @@ def test_systems_spread_from_touching_symbols_only():
         Terminal((710, -20, 746, 16), "supply"),
     ]
     assert assign_systems(runs, terminals) == ["supply", "supply", "return", "unclassified"]
+
+
+def test_run_equally_near_supply_and_return_is_unclassified():
+    runs = [
+        run((0, 0), (100, 0)),  # starts at the supply riser
+        run((118, 18), (118, 120)),  # one elbow from each
+        run((136, 138), (236, 138)),  # ends at the return riser
+    ]
+    terminals = [Terminal((-20, -10, 0, 10), "supply"), Terminal((236, 128, 256, 148), "return")]
+    assert assign_systems(runs, terminals) == ["supply", "unclassified", "return"]
+    assert assign_systems(runs, terminals[::-1]) == ["supply", "unclassified", "return"]
+
+
+def test_run_touching_both_kinds_of_symbol_is_unclassified():
+    runs = [run((0, 0), (100, 0))]
+    terminals = [Terminal((-20, -10, 0, 10), "supply"), Terminal((100, -10, 120, 10), "return")]
+    assert assign_systems(runs, terminals) == ["unclassified"]
+
+
+def test_runs_on_either_side_of_a_riser_box_are_not_joined():
+    runs = [run((0, 0), (100, 0), 18), run((140, 10), (140, 100), 12)]
+    supply = Terminal((-20, -10, 0, 10), "supply")
+    riser = Terminal((106, -20, 122, 20), "return")
+    assert assign_systems(runs, [supply]) == ["supply", "supply"]
+    assert assign_systems(runs, [supply, riser]) == ["supply", "unclassified"]

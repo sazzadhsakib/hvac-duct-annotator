@@ -46,7 +46,7 @@ def test_full_takeoff(page):
     takeoff = detect(page)
     assert takeoff.scale == "1/4\"=1'-0\""
     assert Counter(d.source for d in takeoff.ducts) == {"label": 13, "inferred": 5, "measured": 2}
-    assert Counter(d.system for d in takeoff.ducts) == {"supply": 13, "return": 4, "unclassified": 3}
+    assert Counter(d.system for d in takeoff.ducts) == {"supply": 9, "return": 5, "unclassified": 6}
 
     sizes = [d.size for d in takeoff.ducts if d.source == "label"]
     for size, count in [(DuctSize(18), 1), (DuctSize(14), 2), (DuctSize(8), 2), (DuctSize(22, 14), 1)]:
@@ -60,3 +60,5 @@ def test_full_takeoff(page):
     dining = {d.system for d in takeoff.ducts if d.size == DuctSize(14) and d.run.length > 400}
     assert "supply" in dining and "return" not in dining
     assert {d.system for d in takeoff.ducts if d.size == DuctSize(22, 14)} == {"return"}
+    # The 6" line from grille B/25 is one duct and must not be split between systems.
+    assert {d.system for d in takeoff.ducts if round(d.width_in) == 6} == {"return"}

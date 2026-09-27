@@ -35,10 +35,12 @@ class Run:
     def midpoint(self) -> np.ndarray:
         return (np.asarray(self.p0) + np.asarray(self.p1)) / 2
 
+    def closest(self, pt) -> np.ndarray:
+        t = np.clip(np.subtract(pt, self.p0) @ self.direction, 0, self.length)
+        return np.asarray(self.p0) + t * self.direction
+
     def distance(self, pt) -> float:
-        rel = np.subtract(pt, self.p0)
-        t = np.clip(rel @ self.direction, 0, self.length)
-        return float(np.hypot(*(rel - t * self.direction)))
+        return float(np.hypot(*np.subtract(pt, self.closest(pt))))
 
 
 def pair_walls(
