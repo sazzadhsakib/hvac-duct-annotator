@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from ductmark.geometry import pair_walls
+from ductmark.geometry import Run, merge_collinear, neighbors, pair_walls
 
 
 def segs(*lines, weight=1.0):
@@ -59,3 +59,29 @@ def test_diagonal_duct():
     assert piece.angle == pytest.approx(45)
     assert piece.width == pytest.approx(18)
     assert piece.length == pytest.approx(150)
+
+
+def run(a, b, width=12.0):
+    return Run(a, b, width, 1.0, frozenset())
+
+
+def test_pieces_split_by_branch_opening_merge():
+    lines = [((0, 0), (300, 0)), ((0, 12), (130, 12)), ((160, 12), (300, 12))]
+    (merged,) = merge_collinear(pair_walls(segs(*lines)))
+    assert merged.length == pytest.approx(300)
+    assert merged.width == pytest.approx(12)
+
+
+def test_different_widths_do_not_merge():
+    assert len(merge_collinear([run((0, 0), (100, 0), 12), run((110, 0), (200, 0), 18)])) == 2
+
+
+def test_elbow_and_tee_are_connected():
+    runs = [run((0, 0), (100, 0)), run((118, 18), (118, 120)), run((50, 6), (50, 80), 8)]
+    adj = neighbors(runs)
+    assert 1 in adj[0] and 2 in adj[0]
+
+
+def test_side_by_side_runs_are_not_connected():
+    runs = [run((0, 0), (200, 0)), run((0, 20), (200, 20))]
+    assert neighbors(runs) == {0: [], 1: []}
