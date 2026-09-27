@@ -87,19 +87,46 @@ STANDARD_SCALES = {
 }
 
 
-def infer_scale(observations: list[tuple[list[DuctSize], float]], min_votes: int = 2) -> tuple[str, float]:
-    """Pick the standard scale under which the most labels agree with their measured wall gaps.
+_SCALE_NOTE = re.compile(r"""(?:\d+-)?\d+(?:/\d+)?\s*"\s*=\s*1\s*'(?:\s*-\s*0\s*")?|1\s*"\s*=\s*\d+\s*'""")
+
+
+def scale_notes(texts) -> list[str]:
+    """Scales written on the sheet, such as the title block's 1/4"=1'-0"."""
+    notes = []
+    for text in texts:
+        for m in _SCALE_NOTE.finditer(text.replace("”", '"').replace("’", "'")):
+            note = re.sub(r"\s+", "", m[0])
+            if note not in notes:
+                notes.append(note)
+    return notes
+
+
+def infer_scale(observations: list[tuple[list[DuctSize], float]], notes: list[str] = (), min_votes: int = 2) -> tuple[str, float]:
+    """Pick the scale under which the most labels agree with their measured wall gaps.
 
     observations: (size readings of a label, wall gap in points of the run it sits in).
+    A scale noted on the sheet must be among the best supported and then settles a tie; without
+    one, the winner needs twice the votes of the runner-up. Anything less raises.
     """
-    votes = {
-        name: sum(pick(readings, gap_pt / ppi) is not None for readings, gap_pt in observations)
-        for name, ppi in STANDARD_SCALES.items()
-    }
-    name = max(votes, key=votes.get)
-    if votes[name] < min_votes:
-        raise ValueError("could not infer drawing scale from duct labels; pass --scale")
-    return name, STANDARD_SCALES[name]
+    names = {round(ppi, 6): name for name, ppi in STANDARD_SCALES.items()}
+    noted = []
+    for note in notes:
+        ppi = round(parse_scale(note), 6)
+        names.setdefault(ppi, note)
+        noted.append(ppi)
+    votes = {ppi: sum(pick(readings, gap_pt / ppi) is not None for readings, gap_pt in observations) for ppi in names}
+    best, second = sorted(votes, key=votes.get, reverse=True)[:2]
+    if votes[best] < min_votes:
+        raise ValueError("too few duct labels to infer the drawing scale; pass --scale")
+    if noted:
+        agreeing = {ppi for ppi in noted if votes[ppi] == votes[best]}
+        if len(agreeing) != 1:
+            listed = ", ".join(names[ppi] for ppi in dict.fromkeys(noted))
+            raise ValueError(f"duct labels point to {names[best]} but the sheet notes {listed}; pass --scale")
+        best = agreeing.pop()
+    elif votes[best] < 2 * votes[second]:
+        raise ValueError(f"duct labels fit both {names[best]} and {names[second]}; pass --scale")
+    return names[best], best
 
 
 def format_ft_in(feet: float) -> str:

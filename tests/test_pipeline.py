@@ -85,6 +85,15 @@ def test_text_layer_drawing_end_to_end(drawing, tmp_path):
     ]
 
 
+def test_explicit_scale_overrides_a_disagreeing_sheet_note(drawing):
+    _, page = drawing
+    page.insert_text((620, 380), "SCALE: 1/8\" = 1'-0\"", fontsize=8)
+    with pytest.raises(ValueError, match="sheet notes"):
+        detect(page)
+    takeoff = detect(page, scale="1/4\"=1'-0\"")
+    assert [str(d.size) for d in takeoff.ducts] == ['12"ø', '8"ø']
+
+
 def test_scale_that_no_label_agrees_with_is_rejected(drawing):
     _, page = drawing
     with pytest.raises(ValueError, match="no duct size label"):

@@ -5,7 +5,7 @@ import pymupdf
 
 from .classify import assign_systems, find_terminals
 from .geometry import Run, merge_collinear, neighbors, overlap, pair_walls, side_by_side
-from .labels import DuctSize, has_size_mark, infer_scale, parse_scale, pick, size_readings
+from .labels import DuctSize, has_size_mark, infer_scale, parse_scale, pick, scale_notes, size_readings
 from .ocr import TextBox, ocr_vector_text, page_words
 from .vector import dark_segments
 
@@ -34,23 +34,28 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
     segs = dark_segments(page)
     runs = merge_collinear(pair_walls(segs))
 
-    boxes = [b for b in page_words(page) if size_readings(b.text)]
-    if sum(has_size_mark(b.text) for b in boxes) < 2:
+    words = page_words(page)
+    if sum(has_size_mark(w.text) for w in words if size_readings(w.text)) < 2:
         # Sizes are not in the text layer (SHX text is drawn as strokes); OCR the rendered page,
         # which also covers whatever the text layer holds.
         def near_run(c):
             return any(r.distance(c) <= r.width / 2 + BESIDE for r in runs)
 
-        boxes = [b for b in ocr_vector_text(page, segs, wanted=near_run) if size_readings(b.text)]
+        words = ocr_vector_text(page, segs, wanted=near_run)
 
+    boxes = [w for w in words if size_readings(w.text)]
     marked = [b for b in boxes if has_size_mark(b.text)]
     bare = [b for b in boxes if not has_size_mark(b.text)]
 
     if scale:
         scale_name, ppi = scale, parse_scale(scale)
     else:
-        inside = [(size_readings(b.text), r.width) for b in marked for r in runs if r.distance(b.center) <= r.width / 2]
-        scale_name, ppi = infer_scale(inside)
+        inside = []
+        for b in marked:
+            gap, i = min((r.distance(b.center) - r.width / 2, i) for i, r in enumerate(runs))
+            if gap <= 0:
+                inside.append((size_readings(b.text), runs[i].width))
+        scale_name, ppi = infer_scale(inside, scale_notes([page.get_text(), *(w.text for w in words)]))
 
     adj = neighbors(runs)
     labelled = _assign_labels(runs, marked, ppi)

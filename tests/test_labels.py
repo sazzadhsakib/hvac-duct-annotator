@@ -1,6 +1,6 @@
 import pytest
 
-from ductmark.labels import DuctSize, format_ft_in, has_size_mark, infer_scale, parse_scale, pick, size_readings
+from ductmark.labels import DuctSize, format_ft_in, has_size_mark, infer_scale, parse_scale, pick, scale_notes, size_readings
 
 
 @pytest.mark.parametrize(
@@ -51,8 +51,39 @@ def test_infer_scale_from_labels():
 
 
 def test_infer_scale_needs_agreement():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="too few"):
         infer_scale([([DuctSize(8)], 12.0)])
+
+
+QUARTER, EIGHTH = "1/4\"=1'-0\"", "1/8\"=1'-0\""
+# 8" and 12" read at 1/4"=1'-0", or 16" and 24" read at 1/8"=1'-0": two votes each.
+TIED = [([DuctSize(8)], 12.0), ([DuctSize(12)], 18.0), ([DuctSize(16)], 12.0), ([DuctSize(24)], 18.0)]
+
+
+def test_tied_scale_votes_are_rejected():
+    with pytest.raises(ValueError, match="fit both"):
+        infer_scale(TIED)
+
+
+def test_narrow_scale_lead_is_rejected():
+    with pytest.raises(ValueError, match="fit both"):
+        infer_scale(TIED + [([DuctSize(10)], 15.0)])  # 3 votes to 2
+
+
+def test_scale_noted_on_the_sheet_settles_a_tie():
+    assert infer_scale(TIED, notes=[QUARTER]) == (QUARTER, 1.5)
+    assert infer_scale(TIED, notes=["1/8\"=1'"]) == (EIGHTH, 0.75)
+
+
+def test_scale_noted_on_the_sheet_must_agree_with_labels():
+    obs = [([DuctSize(8)], 12.0), ([DuctSize(14)], 21.1), ([DuctSize(18)], 27.0)]
+    with pytest.raises(ValueError, match="sheet notes"):
+        infer_scale(obs, notes=[EIGHTH])
+
+
+def test_scale_notes_are_found_in_sheet_text():
+    text = "MECHANICAL FLOOR PLAN  SCALE 1/4\" = 1'-0\"  9/23/2025 12:02pm  1\"=20'  1/4°=1"
+    assert scale_notes([text]) == [QUARTER, "1\"=20'"]
 
 
 def test_format_ft_in():
