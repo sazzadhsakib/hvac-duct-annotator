@@ -32,6 +32,7 @@ uv run ductmark drawing.pdf --page 2 --scale "1/8\"=1'-0\""
 | `--page` | `0` | 0-based page index |
 | `--scale` | inferred | e.g. `1/4"=1'-0"`, `1"=20'`, `1:50` |
 | `--dpi` | `150` | PNG resolution |
+| `--max-luma` | `0.25` | lightest stroke (0–1) read as duct geometry; raise it (e.g. `0.35`) for ducts drawn in colour |
 
 Outputs, for an input named `<stem>.pdf`:
 
@@ -50,7 +51,7 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
 1. **Segments** (`vector.py`)
    - Rotation is baked into the page first, so extraction, rendering and overlays share one coordinate frame.
    - Straight stroked edges come from lines, rectangles and quads.
-   - Only dark strokes are kept (luminance ≤ 0.25), because MEP work is drawn dark over a screened-grey architectural background.
+   - Only dark strokes are kept (luminance ≤ 0.25, adjustable with `--max-luma`), because MEP work is drawn dark over a screened-grey architectural background.
 2. **Walls to runs** (`geometry.py`)
    - Near-parallel segments are paired over the interval where they overlap. One long wall can therefore pair with several opposite walls, which handles transitions and tees.
    - With `--scale`, walls may be 3"–60" apart at that scale. Otherwise the limits are 4–80 pt of paper (about 2.7"–53" at 1/4"=1'-0"), because the scale is inferred later from the runs.
@@ -66,8 +67,9 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
      - RapidOCR's recogniser runs on each word, without its detector.
    - The parser accepts the ways OCR misreads SHX text. The ø can come back as `0`, `o` or `g`, and the inch mark can be dropped. The measured wall gap decides between readings: `120` inside a duct 12" wide is `12"ø`.
 4. **Scale**: taken from `--scale`, or inferred. Inference tries each standard architectural and engineering scale and counts, for each, how many explicit labels match the wall gap of the run they sit in.
-   - A scale written on the sheet, such as the title block's `1/4"=1'-0"`, must be among the best supported, and then settles a tie.
-   - Without one, the winner needs twice the votes of the runner-up.
+   - Labels that sit in repeated equal cells (a ceiling grid, hatching, flex ribs) don't vote; they fit those cells by accident.
+   - A scale written on the sheet, such as the title block's `1/4"=1'-0"`, must be among the best supported and have two agreeing labels, and then settles a tie.
+   - Without one, the winner needs three agreeing labels and twice the votes of the runner-up.
    - Anything less stops with an error asking for `--scale`.
    - On the sample, 11 labels agree at 1/4"=1'-0" (1.5 pt per real inch), 1 fits 3/8", and the title block's scale agrees.
 5. **Confirm and grow** (`pipeline.py`)
@@ -104,12 +106,26 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
   - The 4"ø restroom exhaust. OCR merges its label with the adjacent "BDD" text, so the run is never confirmed.
   - The short 14"ø and 12"ø collars at tees.
 
+## Tested on other drawings
+
+To check the tool beyond the sample, I ran it on sheets from publicly posted drawing sets. These PDFs are not included in this repository.
+
+| Drawing | Sheet | Style | Result |
+|---|---|---|---|
+| [Eglin AFB NICoE](https://imlive.s3.amazonaws.com/Federal%20Government/ID66990768310963037007432025819233376360/Attachment%204%20-%20Drawings%2006%20Mechanical.pdf) | M2.3 ground floor duct plan (page 3) | real text layer, 1/8"=1'-0" | Scale inferred as 1/8". 235 runs, 61 confirmed by their own label; spot-checked sizes match the drawing. The 162 measured runs were not checked one by one. |
+| [CAD Sultants HVAC shop drawing](https://caddsultants.com/wp-content/uploads/2020/08/mechanical2.pdf) | M-101 (page 0) | ducts drawn in blue, real text layer, 3/8"=1'-0" | Refused by default, because the blue walls are lighter than the cut-off. With `--max-luma 0.35`: scale 3/8" from the sheet note, 63 runs, 59 confirmed by label. |
+| [USC Lieber College renovation](https://sc.edu/purchasing/solicitations/documents/s_1509557045.pdf) | M-1-R to M-4-R (pages 15–21) | SHX text, labels on leader lines, dark ceiling grid, 1/4"=1'-0" | Three sheets refuse to infer the scale; M-4-R infers 1/4". Given the scale, the output is dominated by ceiling-grid cells and misses most ducts. This drawing style is not supported (see Limitations). |
+| [White Sturgeon hatchery](https://static1.squarespace.com/static/56a24f7f841aba12ab7ecfa9/t/668c4aba6c8d156ad224713d/1720470211832/CCT+White+Sturgeon+CONSOLIDATED_Part2.pdf) | M-101 (page 0) | no duct size labels | Refuses: too few labels. |
+| [Dundas Public School](https://www.schoolinfrastructure.nsw.gov.au/content/dam/infrastructure/projects/d/dundas-public-school-upgrade/2025/may/DPS_REF_-_A9_Mechanical_Drawings.PDF) | M-120 (page 3) | metric (mm) sizes | Refuses: too few labels. |
+
 ## Limitations
 
 - **Vector PDFs only.** Scanned or rasterised drawings would need a raster wall detector; this tool has none.
 - **Straight runs only.** Lengths exclude elbows, flex and fittings. A straight stub shorter than about twice its width is not detected, so on the sample some short collars at tees are missing.
-- **Colour assumption.** Ductwork is assumed dark on a lighter background. Sheets that draw ducts in colour or grey need `max_luma` in `vector.dark_segments` adjusted.
-- **Label placement.** A label must sit inside its duct, or within about 12 pt of it with an explicit size mark, and within the duct's length. Labels at the end of a long leader line are not associated, and a label equally close to two matching ducts is left unused.
+- **Colour assumption.** Ductwork is assumed dark on a lighter background. Sheets that draw ducts in colour or grey need `--max-luma` raised.
+- **Label placement.** A label must sit inside its duct, or within about 12 pt of it with an explicit size mark, and within the duct's length. A label equally close to two matching ducts is left unused.
+- **Leader-line drawings.** Leader lines are not followed. Drawings that put their size labels at the end of leader lines, like the USC set above, leave most ducts unconfirmed. When such a drawing also draws its ceiling grid dark, grid cells are grown as measured ducts.
+- **Imperial sizes only.** Metric labels (`600x300`, `Ø90`) are not parsed.
 - **Rectangular ducts.** For `22"x14"` only the plan dimension can be checked against geometry; the depth comes from the label alone.
 - **Supply/return is a heuristic.** It depends on symbol conventions, not the air-device schedule.
   - On the sample, six runs are unclassified:
