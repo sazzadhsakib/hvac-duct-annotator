@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,8 @@ def test_reference_runs_are_found(page, x, y, width, length):
 def test_full_takeoff(page):
     takeoff = detect(page)
     assert takeoff.scale == "1/4\"=1'-0\""
+    assert Counter(d.source for d in takeoff.ducts) == {"label": 13, "inferred": 5, "measured": 2}
+    assert Counter(d.system for d in takeoff.ducts) == {"supply": 13, "return": 4, "unclassified": 3}
 
     sizes = [d.size for d in takeoff.ducts if d.source == "label"]
     for size, count in [(DuctSize(18), 1), (DuctSize(14), 2), (DuctSize(8), 2), (DuctSize(22, 14), 1)]:
