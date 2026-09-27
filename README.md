@@ -1,5 +1,8 @@
 # hvac-duct-annotator
 
+> [!IMPORTANT]
+> **Demo video (8 min):** [ductmark-demo.mp4](https://github.com/sazzadhsakib/hvac-duct-annotator/releases/download/v0.1.0/ductmark-demo.mp4), about 35 MB. It shows a live run on the sample drawing, the annotated result, and results on three other public drawings.
+
 `ductmark` reads an HVAC mechanical plan PDF. For each duct run it finds the run, reads its size label and measures its length from the drawing scale. It writes three files:
 - an annotated PDF
 - a PNG of the same page
