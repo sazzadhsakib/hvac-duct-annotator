@@ -95,6 +95,8 @@ def _through_symbol(a: Run, b: Run, terminals: list[Terminal], inset: float = 1.
         if inside.any():
             return True
     return False
+
+
 def _has_box(segs: np.ndarray, box, tol: float) -> bool:
     x0, y0, x1, y1 = box
     corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]

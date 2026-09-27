@@ -40,7 +40,7 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
     limits = {}
     if scale:
         # Pairing precedes scale inference, so only a given scale can set the duct width range;
-        # otherwise the paper-point defaults (about 3"-53" at 1/4"=1'-0") apply.
+        # otherwise the paper-point defaults (about 2.7"-53" at 1/4"=1'-0") apply.
         ppi = parse_scale(scale)
         limits = {"min_gap": 0.9 * MIN_SIZE * ppi, "max_gap": 1.1 * MAX_SIZE * ppi, "min_overlap": MIN_STRAIGHT * ppi}
     runs = merge_collinear(pair_walls(segs, **limits))

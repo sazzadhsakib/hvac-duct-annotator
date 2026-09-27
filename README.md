@@ -53,7 +53,7 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
    - Only dark strokes are kept (luminance ≤ 0.25), because MEP work is drawn dark over a screened-grey architectural background.
 2. **Walls to runs** (`geometry.py`)
    - Near-parallel segments are paired over the interval where they overlap. One long wall can therefore pair with several opposite walls, which handles transitions and tees.
-   - With `--scale`, walls may be 3"–60" apart at that scale. Otherwise the limits are 4–80 pt of paper (about 3"–53" at 1/4"=1'-0"), because the scale is inferred later from the runs.
+   - With `--scale`, walls may be 3"–60" apart at that scale. Otherwise the limits are 4–80 pt of paper (about 2.7"–53" at 1/4"=1'-0"), because the scale is inferred later from the runs.
    - These pairs are rejected:
      - overlaps shorter than twice the gap: flex ribs, grille louvres, symbol boxes;
      - pairs with another parallel wall between them: the outer walls of two adjacent ducts.
