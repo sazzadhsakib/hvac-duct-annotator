@@ -51,6 +51,8 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
         scale_name, ppi = infer_scale(inside)
 
     labelled = _assign_labels(runs, boxes, ppi)
+    if not labelled:
+        raise ValueError(f"no duct size label matches its duct width at {scale_name}; check --scale or omit it")
     accepted = _grow(runs, labelled, ppi)
 
     ducts = []
