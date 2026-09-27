@@ -3,7 +3,7 @@ name = "hvac-duct-annotator"
 version = "0.1.0"
 description = "Detect, size, measure and annotate ductwork in HVAC mechanical drawing PDFs"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.26",
     "opencv-python>=4.8",

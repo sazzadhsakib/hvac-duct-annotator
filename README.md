@@ -11,13 +11,13 @@ Colour shows the system: blue is supply, red is return, grey is unclassified. Ea
 
 ## Setup
 
-Requires Python 3.10–3.12 (`rapidocr-onnxruntime` declares `<3.13`) and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11–3.12 (`rapidocr-onnxruntime` declares `<3.13`) and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
 ```
 
-With plain pip: `pip install .` in a 3.10–3.12 environment.
+With plain pip: `pip install .` in a 3.11–3.12 environment.
 
 ## Usage
 
