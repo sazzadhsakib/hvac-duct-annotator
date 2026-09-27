@@ -43,16 +43,30 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
 
         boxes = [b for b in ocr_vector_text(page, segs, wanted=near_run) if size_readings(b.text)]
 
+    marked = [b for b in boxes if has_size_mark(b.text)]
+    bare = [b for b in boxes if not has_size_mark(b.text)]
+
     if scale:
         scale_name, ppi = scale, parse_scale(scale)
     else:
-        inside = [(size_readings(b.text), r.width) for b in boxes for r in runs if r.distance(b.center) <= r.width / 2]
+        inside = [(size_readings(b.text), r.width) for b in marked for r in runs if r.distance(b.center) <= r.width / 2]
         scale_name, ppi = infer_scale(inside)
 
-    labelled = _assign_labels(runs, boxes, ppi)
+    adj = neighbors(runs)
+    labelled = _assign_labels(runs, marked, ppi)
     if not labelled:
         raise ValueError(f"no duct size label matches its duct width at {scale_name}; check --scale or omit it")
-    accepted = _grow(runs, labelled, ppi)
+    accepted = _grow(runs, adj, labelled, ppi)
+
+    # A bare number is either a size whose ø and inch marks OCR lost, or an unrelated callout, CFM
+    # or room number. It only counts inside a run no explicit label claims, and only on ductwork
+    # the explicit labels already confirmed or on a run touching it.
+    corroborated = {
+        i: label for i, label in _assign_labels(runs, bare, ppi).items()
+        if i not in labelled and (i in accepted or any(j in accepted for j in adj[i]))
+    }
+    if corroborated:
+        accepted = _grow(runs, adj, labelled | corroborated, ppi)
 
     ducts = []
     order = sorted(accepted, key=lambda i: (round(runs[i].midpoint[1] / 20), runs[i].midpoint[0]))
@@ -82,7 +96,7 @@ def _assign_labels(runs: list[Run], boxes: list[TextBox], ppi: float) -> dict[in
     return {i: Counter(v).most_common(1)[0][0] for i, v in votes.items()}
 
 
-def _grow(runs: list[Run], labelled: dict[int, tuple[DuctSize, str]], ppi: float) -> dict[int, tuple]:
+def _grow(runs: list[Run], adj: dict[int, list[int]], labelled: dict[int, tuple[DuctSize, str]], ppi: float) -> dict[int, tuple]:
     """Extend confirmed runs to connected runs that carry no label of their own.
 
     Same-width neighbours inherit the size first. Only when nothing more can be inherited is a
@@ -90,7 +104,6 @@ def _grow(runs: list[Run], labelled: dict[int, tuple[DuctSize, str]], ppi: float
     inherited from.
     """
     accepted = {i: (size, "label", text) for i, (size, text) in labelled.items()}
-    adj = neighbors(runs)
     queue = deque(accepted)
     while queue:
         _inherit_same_width(runs, adj, accepted, queue)
