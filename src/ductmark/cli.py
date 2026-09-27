@@ -2,6 +2,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import pymupdf
+
 from .annotate import annotate, describe, save
 from .pipeline import detect
 from .vector import load_page
@@ -16,10 +18,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--dpi", type=int, default=150, help="PNG resolution (default: 150)")
     args = parser.parse_args(argv)
 
-    doc, page = load_page(str(args.pdf), args.page)
     try:
+        doc, page = load_page(str(args.pdf), args.page)
         takeoff = detect(page, args.scale)
-    except ValueError as e:
+    except (pymupdf.FileNotFoundError, pymupdf.FileDataError, IndexError, ValueError) as e:
         sys.exit(f"ductmark: {e}")
 
     annotate(page, takeoff)

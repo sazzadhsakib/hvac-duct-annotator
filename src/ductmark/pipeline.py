@@ -72,11 +72,9 @@ def _assign_labels(runs: list[Run], boxes: list[TextBox], ppi: float) -> dict[in
     for box in boxes:
         readings = size_readings(box.text)
         reach = BESIDE if has_size_mark(box.text) else 0.0
-        candidates = sorted(
-            (r.distance(box.center) - r.width / 2, i) for i, r in enumerate(runs)
-            if r.distance(box.center) <= r.width / 2 + reach
-        )
-        for _, i in candidates:
+        for gap, i in sorted((r.distance(box.center) - r.width / 2, i) for i, r in enumerate(runs)):
+            if gap > reach:
+                break
             if size := pick(readings, runs[i].width / ppi):
                 votes.setdefault(i, []).append((size, box.text))
                 break
@@ -101,7 +99,7 @@ def _grow(runs: list[Run], labelled: dict[int, tuple[DuctSize, str]], ppi: float
             i = queue.popleft()
             for j in adj[i]:
                 if j not in accepted and _same_width(runs[i], runs[j]) and not _covered(runs[j], runs, accepted):
-                    size, source, _ = accepted[i]
+                    size = accepted[i][0]
                     accepted[j] = (size, "inferred" if size else "measured", "")
                     queue.append(j)
         for j in dict.fromkeys(j for i in accepted for j in adj[i]):
