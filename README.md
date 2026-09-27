@@ -50,9 +50,10 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
 1. **Segments** (`vector.py`)
    - Rotation is baked into the page first, so extraction, rendering and overlays share one coordinate frame.
    - Straight stroked edges come from lines, rectangles and quads.
-   - Only dark strokes are kept, because MEP work is drawn black over a screened-grey architectural background.
+   - Only dark strokes are kept (luminance ≤ 0.25), because MEP work is drawn dark over a screened-grey architectural background.
 2. **Walls to runs** (`geometry.py`)
-   - Near-parallel segments 4–80 pt apart are paired over the interval where they overlap. One long wall can therefore pair with several opposite walls, which handles transitions and tees.
+   - Near-parallel segments are paired over the interval where they overlap. One long wall can therefore pair with several opposite walls, which handles transitions and tees.
+   - With `--scale`, walls may be 3"–60" apart at that scale. Otherwise the limits are 4–80 pt of paper (about 3"–53" at 1/4"=1'-0"), because the scale is inferred later from the runs.
    - These pairs are rejected:
      - overlaps shorter than twice the gap: flex ribs, grille louvres, symbol boxes;
      - pairs with another parallel wall between them: the outer walls of two adjacent ducts.
@@ -64,9 +65,14 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
      - each word is deskewed from its minimum-area rectangle, so horizontal, vertical and diagonal labels are all read upright;
      - RapidOCR's recogniser runs on each word, without its detector.
    - The parser accepts the ways OCR misreads SHX text. The ø can come back as `0`, `o` or `g`, and the inch mark can be dropped. The measured wall gap decides between readings: `120` inside a duct 12" wide is `12"ø`.
-4. **Scale**: taken from `--scale`, or inferred. Inference tries each standard architectural and engineering scale and picks the one under which the most labels match their wall gaps. On the sample, 14 label/run pairs agree at 1/4"=1'-0" (1.5 pt per real inch), and no other scale gets more than 2.
+4. **Scale**: taken from `--scale`, or inferred. Inference tries each standard architectural and engineering scale and counts, for each, how many explicit labels match the wall gap of the run they sit in.
+   - A scale written on the sheet, such as the title block's `1/4"=1'-0"`, must be among the best supported, and then settles a tie.
+   - Without one, the winner needs twice the votes of the runner-up.
+   - Anything less stops with an error asking for `--scale`.
+   - On the sample, 11 labels agree at 1/4"=1'-0" (1.5 pt per real inch), 1 fits 3/8", and the title block's scale agrees.
 5. **Confirm and grow** (`pipeline.py`)
-   - A run is kept when a nearby label agrees with its measured width.
+   - A run is confirmed by an explicit size label (`12"ø`, `22"x14"`, or `12"0` where OCR read the ø as a zero). The label must sit inside the run or beside it, lie within its length, and agree with its measured width. A label that two runs fit about equally well is not used.
+   - A bare number such as `08` (the marks lost to OCR) counts only inside a run no explicit label claims, and only on or next to ductwork already confirmed. Callouts, CFM values and room numbers elsewhere are ignored.
    - Connected runs of the same width inherit that size (`inferred`).
    - Connected runs of a different width are kept with their measured width (`measured`) only if they pass all of these:
      - the same lineweight as confirmed ducts;
@@ -76,21 +82,22 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
    - Everything else is dropped. This is what keeps table borders, walls and equipment outlines out of the result.
 6. **Supply/return** (`classify.py`)
    - Boxes with corner-to-corner diagonals are air-device and riser symbols: an X means supply, a single diagonal means return.
-   - Symbols that touch a run end (risers, inline boxes) seed that run's system, which then spreads through the connection graph.
-   - Devices hung off flex sit too far from their branch to attach reliably, so runs no touching symbol reaches stay `unclassified`.
+   - Symbols that touch a run end (risers, inline boxes) seed that run's system. Each run takes the system of the nearest seed in connection hops.
+   - A duct ends at a riser or device box, so two runs whose link passes through one are not joined.
+   - Devices hung off flex sit too far from their branch to attach reliably. A run that no seed reaches, or that is equally near a supply and a return seed, stays `unclassified`.
 7. **Length**: the straight centerline length of each run at the drawing scale. Elbows, flex and fittings are not included.
 
 ## Results on the sample
 
-`samples/testset2.pdf` (sheet M2.0) takes about 14 s on a laptop CPU, most of it OCR.
+`samples/testset2.pdf` (sheet M2.0) takes about 15 s on a 20-thread laptop CPU, most of it OCR; it is slower when the cores are busy.
 
-- **Scale:** inferred as 1/4"=1'-0".
+- **Scale:** inferred as 1/4"=1'-0", matching the title block.
 - **Runs:** 20 in total:
   - 13 confirmed by their own label;
   - 5 that inherited a size from a connected run;
   - 2 kept with a measured width: the 20" kitchen trunk and a 6" connector, neither of which carries a label.
 - **Size labels:** all 13 labels on detected runs are read and matched correctly. Labels on elbows, flex and short collars are not used, because those pieces are not measured.
-- **Systems:** 13 supply, 4 return, 3 unclassified. The 18"ø grease duct (18'-10") is kitchen exhaust. It stays unclassified because no supply or return symbol touches it; the tool has no exhaust class.
+- **Systems:** 9 supply, 5 return, 6 unclassified (the unclassified runs are listed under Limitations). The 18"ø grease duct (18'-10") is kitchen exhaust. It stays unclassified because no supply or return symbol touches it; the tool has no exhaust class.
 - **Nothing is marked** in the title block, the notes or the architectural background.
 - **Missed runs**, compared with the reference annotation:
   - The 10"ø drop under the RTU-1 supply riser, about 4'-8". The 12"ø crossover splits its walls into pieces too short to pair, so its label (read correctly) has no run to attach to.
@@ -102,20 +109,22 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
 - **Vector PDFs only.** Scanned or rasterised drawings would need a raster wall detector; this tool has none.
 - **Straight runs only.** Lengths exclude elbows, flex and fittings. A straight stub shorter than about twice its width is not detected, so on the sample some short collars at tees are missing.
 - **Colour assumption.** Ductwork is assumed dark on a lighter background. Sheets that draw ducts in colour or grey need `max_luma` in `vector.dark_segments` adjusted.
-- **Label placement.** A label must sit inside its duct, or within about 12 pt of it with an explicit size mark. Labels at the end of a long leader line are not associated.
+- **Label placement.** A label must sit inside its duct, or within about 12 pt of it with an explicit size mark, and within the duct's length. Labels at the end of a long leader line are not associated, and a label equally close to two matching ducts is left unused.
 - **Rectangular ducts.** For `22"x14"` only the plan dimension can be checked against geometry; the depth comes from the label alone.
 - **Supply/return is a heuristic.** It depends on symbol conventions, not the air-device schedule.
-  - On the sample, two runs are left unclassified: the upper 14" dining duct and the 10" branch from grille B/375. The stubs that connect them to the DOAS-1 box are too short to be detected as runs.
-  - The 12"ø diagonal to grille D/500 is marked supply because it connects to the supply network, although that grille's single-diagonal symbol suggests return.
+  - On the sample, six runs are unclassified:
+    - the grease duct;
+    - the upper 14" dining duct and the 10" branch from grille B/375, whose stubs to the DOAS-1 box are too short to be detected as runs;
+    - the 12"ø drop beside the RTU-1 risers and its branches to A/700 and D/500, which reach the return riser only through an elbow, not a detected run.
   - Reliable classification needs the schedule sheet or layers that encode the system.
-- **Thresholds are in paper points.** Wall pairing accepts gaps of 4–80 pt: about 2.7"–53" at 1/4"=1'-0", but only 5.3"–107" at 1/8". Sheets at unusual scales may need the `pair_walls` limits changed. All thresholds were tuned on this one sheet.
+- **Thresholds.** With an inferred scale, wall pairing uses the 4–80 pt paper defaults: about 2.7"–53" at 1/4"=1'-0", but 5.3"–107" at 1/8". Pass `--scale` on sheets at other scales, so duct widths and symbol sizes follow the real sizes. The remaining thresholds (label offset, touch tolerance, OCR glyph sizes) are paper-space conventions. All were tuned on this one sheet.
 - **Memory.** Peak memory is about 1.2 GB, from the full-sheet 300 dpi render and its component maps. Rendering only the regions around candidate runs would cut it.
 - **Other gaps:** dashed (hidden or existing) ductwork is not detected, and one page is processed per run.
 
 ## Tests
 
 ```bash
-uv run pytest               # all tests, ~20 s
+uv run pytest               # all tests, ~25 s on 20 threads
 uv run pytest -m "not slow" # skip the full OCR run on the sample
 ```
 
@@ -123,9 +132,11 @@ uv run pytest -m "not slow" # skip the full OCR run on the sample
   - wall pairing on synthetic geometry: transitions, adjacent ducts, flex ribs, liners, diagonals;
   - run merging and connectivity;
   - label and scale parsing, including real OCR strings from the sample;
-  - label assignment and run growth;
-  - symbol classification.
-- `tests/test_pipeline.py` runs a synthetic drawing with a real text layer through detection and every output, without OCR.
+  - label assignment, including ambiguous labels, labels past a run's end and bare numbers;
+  - scale inference: clear, tied and narrow votes, and the sheet's noted scale;
+  - run growth;
+  - symbol classification, including conflicting seeds and links through riser boxes.
+- `tests/test_pipeline.py` runs synthetic drawings with a real text layer through detection and every output, without OCR. This includes drawings at 1/2" and 1/8" scale whose ducts fall outside the paper-point defaults.
 - `tests/test_sample.py` checks the known runs on the sample drawing, and pins the full takeoff: run counts by source and by system.
 
 ## Dependencies
