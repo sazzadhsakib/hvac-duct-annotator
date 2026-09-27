@@ -33,6 +33,23 @@ def test_only_marked_labels_attach_from_beside_a_duct():
     assert _assign_labels(runs, [TextBox("40", (150, 10))], PPI) == {}
 
 
+def test_label_midway_between_two_matching_ducts_is_not_guessed():
+    runs = [run((0, 0), (300, 0), 18, walls=(0, 1)), run((0, 40), (300, 40), 18, walls=(2, 3))]
+    assert _assign_labels(runs, [TextBox('12"ø', (150, 20))], PPI) == {}
+
+
+def test_label_past_the_end_of_a_run_is_not_given_to_it():
+    runs = [run((0, 0), (100, 0), 18)]
+    assert _assign_labels(runs, [TextBox('12"ø', (120, 0))], PPI) == {}
+
+
+def test_run_with_conflicting_labels_takes_the_majority_or_none():
+    runs = [run((0, 0), (300, 0), 18)]
+    tie = [TextBox('12"ø', (50, 0)), TextBox('13"ø', (150, 0))]
+    assert _assign_labels(runs, tie, PPI) == {}
+    assert _assign_labels(runs, tie + [TextBox('12"ø', (250, 0))], PPI) == {0: (DuctSize(12), '12"ø')}
+
+
 def test_growth_inherits_same_width_and_filters_the_rest():
     runs = [
         run((0, 0), (300, 0), 18, walls=(0, 1)),  # labelled

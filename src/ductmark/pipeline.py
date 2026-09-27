@@ -1,6 +1,7 @@
 from collections import Counter, deque
 from dataclasses import dataclass
 
+import numpy as np
 import pymupdf
 
 from .classify import assign_systems, find_terminals
@@ -10,6 +11,7 @@ from .ocr import TextBox, ocr_vector_text, page_words
 from .vector import dark_segments
 
 BESIDE = 12.0  # pt; how far outside a duct wall a size label may sit
+AMBIGUOUS = 2.0  # pt; runs whose fit to a label differs by less than this are indistinguishable
 
 
 @dataclass
@@ -87,18 +89,33 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
 
 
 def _assign_labels(runs: list[Run], boxes: list[TextBox], ppi: float) -> dict[int, tuple[DuctSize, str]]:
-    """Give each size label to the nearest run whose measured width agrees with it."""
+    """Give each size label to the run it sits in, or beside, whose measured width agrees with it.
+
+    The label must lie within the run's length. A label that two runs fit about equally well, or a
+    run holding different sizes in equal number, is left unassigned rather than guessed.
+    """
     votes: dict[int, list[tuple[DuctSize, str]]] = {}
     for box in boxes:
         readings = size_readings(box.text)
         reach = BESIDE if has_size_mark(box.text) else 0.0
-        for gap, i in sorted((r.distance(box.center) - r.width / 2, i) for i, r in enumerate(runs)):
-            if gap > reach:
-                break
-            if size := pick(readings, runs[i].width / ppi):
-                votes.setdefault(i, []).append((size, box.text))
-                break
-    return {i: Counter(v).most_common(1)[0][0] for i, v in votes.items()}
+        fits = []
+        for i, r in enumerate(runs):
+            gap = r.distance(box.center) - r.width / 2
+            along = np.subtract(box.center, r.p0) @ r.direction
+            if gap <= reach and 0 <= along <= r.length and (size := pick(readings, r.width / ppi)):
+                fits.append((gap, i, size))
+        fits.sort(key=lambda f: f[0])
+        if not fits or (len(fits) > 1 and fits[1][0] - fits[0][0] < AMBIGUOUS):
+            continue
+        _, i, size = fits[0]
+        votes.setdefault(i, []).append((size, box.text))
+
+    labelled = {}
+    for i, v in votes.items():
+        (size, n), *rest = Counter(s for s, _ in v).most_common()
+        if not rest or rest[0][1] < n:
+            labelled[i] = (size, next(text for s, text in v if s == size))
+    return labelled
 
 
 def _grow(runs: list[Run], adj: dict[int, list[int]], labelled: dict[int, tuple[DuctSize, str]], ppi: float) -> dict[int, tuple]:
