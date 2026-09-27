@@ -94,6 +94,81 @@ def pair_walls(
     return pieces
 
 
+def merge_collinear(
+    pieces: list[Run], width_tol: float = 0.08, gap_factor: float = 3.0, angle_tol: float = 1.5
+) -> list[Run]:
+    """Join same-width pieces on one axis that are split by dampers, risers or branch openings."""
+    parent = list(range(len(pieces)))
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for i, a in enumerate(pieces):
+        for j in range(i + 1, len(pieces)):
+            if _mergeable(a, pieces[j], width_tol, gap_factor, angle_tol):
+                parent[find(i)] = find(j)
+
+    groups: dict[int, list[Run]] = {}
+    for i, piece in enumerate(pieces):
+        groups.setdefault(find(i), []).append(piece)
+    return [_combine(g) for g in groups.values()]
+
+
+def neighbors(runs: list[Run], reach: float = 2.5, angle_tol: float = 10.0) -> dict[int, list[int]]:
+    """Runs whose ends meet across a fitting gap (elbow, tee, transition) of up to reach x width."""
+    adj: dict[int, list[int]] = {i: [] for i in range(len(runs))}
+    for i, a in enumerate(runs):
+        for j in range(i + 1, len(runs)):
+            b = runs[j]
+            limit = reach * max(a.width, b.width)
+            if _parallel(a, b, angle_tol):
+                # Side-by-side parallel runs are not connected; only end-to-end jogs are.
+                if _axial_gap(a, b) < 0:
+                    continue
+                d = min(np.hypot(*np.subtract(p, q)) for p in (a.p0, a.p1) for q in (b.p0, b.p1))
+            else:
+                d = min(a.distance(b.p0), a.distance(b.p1), b.distance(a.p0), b.distance(a.p1))
+            if d <= limit:
+                adj[i].append(j)
+                adj[j].append(i)
+    return adj
+
+
+def _mergeable(a: Run, b: Run, width_tol: float, gap_factor: float, angle_tol: float) -> bool:
+    w = max(a.width, b.width)
+    if abs(a.width - b.width) > max(1.0, width_tol * w) or not _parallel(a, b, angle_tol):
+        return False
+    if abs((b.midpoint - np.asarray(a.p0)) @ a.normal) > 0.25 * w:
+        return False
+    return _axial_gap(a, b) <= gap_factor * w
+
+
+def _parallel(a: Run, b: Run, tol: float) -> bool:
+    d = abs(a.angle - b.angle)
+    return min(d, 180 - d) <= tol
+
+
+def _axial_gap(a: Run, b: Run) -> float:
+    s = sorted((np.subtract(p, a.p0) @ a.direction for p in (b.p0, b.p1)))
+    return max(s[0] - a.length, -s[1])
+
+
+def _combine(group: list[Run]) -> Run:
+    if len(group) == 1:
+        return group[0]
+    axis = max(group, key=lambda r: r.length)
+    origin, u, n = np.asarray(axis.p0), axis.direction, axis.normal
+    s = [np.subtract(p, origin) @ u for r in group for p in (r.p0, r.p1)]
+    lengths = np.array([r.length for r in group])
+    off = np.average([(r.midpoint - origin) @ n for r in group], weights=lengths)
+    width = np.average([r.width for r in group], weights=lengths)
+    walls = frozenset().union(*(r.walls for r in group))
+    return _run(origin + u * min(s) + n * off, origin + u * max(s) + n * off, width, max(r.weight for r in group), walls)
+
+
 def _blocked(i, lo, hi, off, p0, p1, u, n, ang, min_gap, angle_tol, block_cover) -> bool:
     dang = np.abs(ang - ang[i])
     parallel = np.minimum(dang, 180 - dang) <= angle_tol
