@@ -18,14 +18,15 @@ class DuctSize:
 MIN_SIZE, MAX_SIZE = 3, 60
 
 # OCR renders the SHX "ø" as 0, o, g, Φ, a CJK glyph, or drops it; inch marks come back as
-# quotes, asterisks or nothing.
+# quotes, doubled apostrophes, asterisks or nothing. A single apostrophe is feet, not inches.
 _CLEAN = str.maketrans({"I": "1", "l": "1", "|": None, "[": None, "]": None, "(": None, ")": None, " ": None})
-_QUOTE = "\"'”″*"
+_INCH = "(?:[\"”″*]|'')"
 _DIA = "øØΦφ⌀∅g@中"
-_RECT = re.compile(rf"(\d{{1,2}})[{_QUOTE}]{{0,2}}[xX×](\d{{1,2}})[{_QUOTE}]{{0,2}}")
-_QUOTED = re.compile(rf"(\d{{1,2}})[{_QUOTE}]{{1,2}}([{_DIA}0oO])?")
+_RECT = re.compile(rf"(\d{{1,2}}){_INCH}?[xX×](\d{{1,2}}){_INCH}?")
+_QUOTED = re.compile(rf"(\d{{1,2}}){_INCH}{{1,2}}([{_DIA}0oO])?")
 _DIAMETER = re.compile(rf"(\d{{1,2}})[{_DIA}]")
-_MARK = re.compile(rf"[{_QUOTE}{_DIA}]|\d[xX×]\d")
+# An inch mark alone is not enough: dimensions and heights ("8'-6\"") carry those too.
+_MARK = re.compile(rf"[{_DIA}]|{_INCH}[0oO]$|\d{_INCH}?[xX×]\d")
 
 
 def size_readings(text: str) -> list[DuctSize]:

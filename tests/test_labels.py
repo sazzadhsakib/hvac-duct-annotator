@@ -21,14 +21,14 @@ def test_size_readings(text, expected):
     assert size_readings(text) == expected
 
 
-@pytest.mark.parametrize("text", ['3/4" U/C', '+48"AFF', "BDD", "RTU-1", "1/4\"=1'-0\""])
+@pytest.mark.parametrize("text", ['3/4" U/C', '+48"AFF', "BDD", "RTU-1", "1/4\"=1'-0\"", "10'"])
 def test_non_size_text_has_no_readings(text):
     assert size_readings(text) == []
 
 
 def test_size_mark_separates_labels_from_tags():
-    assert has_size_mark('4"ø') and has_size_mark("22x14")
-    assert not has_size_mark("400")
+    assert has_size_mark('4"ø') and has_size_mark('12"0') and has_size_mark("22x14")
+    assert not has_size_mark("400") and not has_size_mark('6"')
 
 
 def test_pick_uses_measured_width():
