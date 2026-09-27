@@ -22,14 +22,17 @@ def describe(duct: Duct) -> str:
 def annotate(page: pymupdf.Page, takeoff: Takeoff) -> None:
     for duct in takeoff.ducts:
         color = COLORS[duct.system]
+        width = max(3.0, 0.6 * duct.run.width)
+        measured = duct.source == "measured"
         shape = page.new_shape()
         shape.draw_line(duct.run.p0, duct.run.p1)
         shape.finish(
             color=color,
-            width=max(3.0, 0.6 * duct.run.width),
+            width=width,
             stroke_opacity=0.45,
-            lineCap=1,
-            dashes="[8 5] 0" if duct.source == "measured" else None,
+            # Round caps would fill the gaps of a dashed stroke this wide.
+            lineCap=0 if measured else 1,
+            dashes=f"[{2 * width:.1f} {width:.1f}] 0" if measured else None,
         )
         shape.commit()
         _tag(page, duct, color)
@@ -40,7 +43,9 @@ def _tag(page: pymupdf.Page, duct: Duct, color) -> None:
     text = describe(duct)
     width = pymupdf.get_text_length(text, fontname="helv", fontsize=TAG_SIZE)
     normal = duct.run.normal if duct.run.normal[1] <= 0 else -duct.run.normal
-    anchor = duct.run.midpoint + normal * (duct.run.width / 2 + 3 + TAG_SIZE / 2)
+    # Tags are horizontal, so their extent along the normal depends on the run's direction.
+    extent = abs(normal[0]) * width / 2 + abs(normal[1]) * TAG_SIZE / 2
+    anchor = duct.run.midpoint + normal * (duct.run.width / 2 + 3 + extent)
     box = pymupdf.Rect(anchor[0] - width / 2 - 1.5, anchor[1] - TAG_SIZE / 2 - 1.5, anchor[0] + width / 2 + 1.5, anchor[1] + TAG_SIZE / 2 + 1.5)
     page.draw_rect(box, color=color, fill=(1, 1, 1), width=0.6, fill_opacity=0.85)
     page.insert_text((box.x0 + 1.5, box.y1 - 2.8), text, fontname="helv", fontsize=TAG_SIZE, color=color)
