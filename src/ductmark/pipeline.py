@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import pymupdf
 
+from .classify import assign_systems, find_terminals
 from .geometry import Run, merge_collinear, neighbors, overlap, pair_walls, side_by_side
 from .labels import DuctSize, has_size_mark, infer_scale, parse_scale, pick, size_readings
 from .ocr import TextBox, ocr_vector_text, page_words
@@ -58,6 +59,10 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
         run = runs[i]
         size, source, text = accepted[i]
         ducts.append(Duct(f"D{n}", run, size, source, text, run.width / ppi, run.length / ppi / 12))
+
+    systems = assign_systems([d.run for d in ducts], find_terminals(segs))
+    for duct, system in zip(ducts, systems):
+        duct.system = system
     return Takeoff(ducts, scale_name, ppi)
 
 
