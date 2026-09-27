@@ -7,7 +7,7 @@
 
 ![Annotated sample](docs/sample_output.png)
 
-Colour shows the system: blue is supply, red is return, grey is unclassified. Each tag reads `id · size · straight length`. A dashed line means the size was measured from the drawing, because the run has no size label.
+Colour shows the system: blue is supply, red is return, grey is unclassified. Each tag shows the run id, its size and its straight length. A dashed line means the size was measured from the drawing, because the run has no size label.
 
 ## Setup
 
@@ -82,7 +82,7 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
 
 ## Results on the sample
 
-`samples/testset2.pdf` (sheet M2.0) takes about 15 s on a laptop CPU, most of it OCR.
+`samples/testset2.pdf` (sheet M2.0) takes about 14 s on a laptop CPU, most of it OCR.
 
 - **Scale:** inferred as 1/4"=1'-0".
 - **Runs:** 20 in total:
@@ -90,8 +90,12 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
   - 5 that inherited a size from a connected run;
   - 2 kept with a measured width: the 20" kitchen trunk and a 6" connector, neither of which carries a label.
 - **Size labels:** all 13 labels on detected runs are read and matched correctly. Labels on elbows, flex and short collars are not used, because those pieces are not measured.
-- **Systems:** 13 supply, 4 return, 3 unclassified. The 18"ø grease duct is unclassified, which is correct: it is kitchen exhaust. Its length is 18'-10".
+- **Systems:** 13 supply, 4 return, 3 unclassified. The 18"ø grease duct (18'-10") is kitchen exhaust. It stays unclassified because no supply or return symbol touches it; the tool has no exhaust class.
 - **Nothing is marked** in the title block, the notes or the architectural background.
+- **Missed runs**, compared with the reference annotation:
+  - The 10"ø drop under the RTU-1 supply riser, about 4'-8". The 12"ø crossover splits its walls into pieces too short to pair, so its label (read correctly) has no run to attach to.
+  - The 4"ø restroom exhaust. OCR merges its label with the adjacent "BDD" text, so the run is never confirmed.
+  - The short 14"ø and 12"ø collars at tees.
 
 ## Limitations
 
@@ -101,9 +105,11 @@ The sample is a Bluebeam-flattened AutoCAD export. Its duct walls are exact vect
 - **Label placement.** A label must sit inside its duct, or within about 12 pt of it with an explicit size mark. Labels at the end of a long leader line are not associated.
 - **Rectangular ducts.** For `22"x14"` only the plan dimension can be checked against geometry; the depth comes from the label alone.
 - **Supply/return is a heuristic.** It depends on symbol conventions, not the air-device schedule.
-  - On the sample, two runs are left unclassified: the upper 14" dining duct and a 10" riser. Their connecting stubs are too short to be detected as runs.
+  - On the sample, two runs are left unclassified: the upper 14" dining duct and the 10" branch from grille B/375. The stubs that connect them to the DOAS-1 box are too short to be detected as runs.
   - The 12"ø diagonal to grille D/500 is marked supply because it connects to the supply network, although that grille's single-diagonal symbol suggests return.
   - Reliable classification needs the schedule sheet or layers that encode the system.
+- **Thresholds are in paper points.** Wall pairing accepts gaps of 4–80 pt: about 2.7"–53" at 1/4"=1'-0", but only 5.3"–107" at 1/8". Sheets at unusual scales may need the `pair_walls` limits changed. All thresholds were tuned on this one sheet.
+- **Memory.** Peak memory is about 1.2 GB, from the full-sheet 300 dpi render and its component maps. Rendering only the regions around candidate runs would cut it.
 - **Other gaps:** dashed (hidden or existing) ductwork is not detected, and one page is processed per run.
 
 ## Tests
@@ -117,8 +123,10 @@ uv run pytest -m "not slow" # skip the full OCR run on the sample
   - wall pairing on synthetic geometry: transitions, adjacent ducts, flex ribs, liners, diagonals;
   - run merging and connectivity;
   - label and scale parsing, including real OCR strings from the sample;
+  - label assignment and run growth;
   - symbol classification.
-- `tests/test_sample.py` checks the known runs on the sample drawing and the full takeoff.
+- `tests/test_pipeline.py` runs a synthetic drawing with a real text layer through detection and every output, without OCR.
+- `tests/test_sample.py` checks the known runs on the sample drawing, and pins the full takeoff: run counts by source and by system.
 
 ## Dependencies
 
