@@ -20,13 +20,12 @@ LONG_STROKE = 18.0
 class TextBox:
     text: str
     center: tuple[float, float]
-    height: float
 
 
 def page_words(page: pymupdf.Page) -> list[TextBox]:
     boxes = []
     for x0, y0, x1, y1, word, *_ in page.get_text("words"):
-        boxes.append(TextBox(word, ((x0 + x1) / 2, (y0 + y1) / 2), min(x1 - x0, y1 - y0)))
+        boxes.append(TextBox(word, ((x0 + x1) / 2, (y0 + y1) / 2)))
     return boxes
 
 
@@ -56,9 +55,9 @@ def ocr_vector_text(
             continue
         x, y, w, h, _ = stats[i]
         word = (labels[y:y + h, x:x + w] == i) & (glyphs[y:y + h, x:x + w] > 0)
-        crop, height = _deskew(word, pad=int(3 * zoom))
+        crop = _deskew(word, pad=int(3 * zoom))
         if crop is not None and (text := _read(crop)):
-            boxes.append(TextBox(text, center, height / zoom))
+            boxes.append(TextBox(text, center))
     return boxes
 
 
@@ -83,10 +82,10 @@ def _glyph_mask(mask: np.ndarray, zoom: float) -> np.ndarray:
     return np.where(keep[labels], 255, 0).astype(np.uint8)
 
 
-def _deskew(word: np.ndarray, pad: int) -> tuple[np.ndarray | None, float]:
+def _deskew(word: np.ndarray, pad: int) -> np.ndarray | None:
     pts = np.column_stack(np.nonzero(word)[::-1]).astype(np.float32)
     if len(pts) < 10:
-        return None, 0.0
+        return None
     (cx, cy), (w, h), angle = cv2.minAreaRect(pts)
     if w < h:
         w, h, angle = h, w, angle + 90
@@ -96,7 +95,7 @@ def _deskew(word: np.ndarray, pad: int) -> tuple[np.ndarray | None, float]:
     out_w, out_h = int(w) + 2 * pad, int(h) + 2 * pad
     m = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
     m[:, 2] += (out_w / 2 - cx, out_h / 2 - cy)
-    return cv2.warpAffine(src, m, (out_w, out_h), borderValue=255), float(h)
+    return cv2.warpAffine(src, m, (out_w, out_h), borderValue=255)
 
 
 def _read(crop: np.ndarray) -> str:

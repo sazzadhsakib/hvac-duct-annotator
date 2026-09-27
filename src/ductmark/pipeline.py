@@ -28,7 +28,6 @@ class Duct:
 class Takeoff:
     ducts: list[Duct]
     scale: str
-    pt_per_inch: float
 
 
 def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
@@ -65,7 +64,7 @@ def detect(page: pymupdf.Page, scale: str | None = None) -> Takeoff:
     systems = assign_systems([d.run for d in ducts], find_terminals(segs))
     for duct, system in zip(ducts, systems):
         duct.system = system
-    return Takeoff(ducts, scale_name, ppi)
+    return Takeoff(ducts, scale_name)
 
 
 def _assign_labels(runs: list[Run], boxes: list[TextBox], ppi: float) -> dict[int, tuple[DuctSize, str]]:
@@ -87,35 +86,46 @@ def _grow(runs: list[Run], labelled: dict[int, tuple[DuctSize, str]], ppi: float
     """Extend confirmed runs to connected runs that carry no label of their own.
 
     Same-width neighbours inherit the size first. Only when nothing more can be inherited is a
-    width change accepted, and then only for runs that look like the confirmed ductwork: same
-    lineweight, long enough, not a flex rib stack, not the gap between or a piece inside
-    accepted ducts.
+    width change admitted, so a run is never sized by a different-width neighbour it could have
+    inherited from.
     """
     accepted = {i: (size, "label", text) for i, (size, text) in labelled.items()}
-    weights = {round(runs[i].weight, 2) for i in accepted}
     adj = neighbors(runs)
-    stacked = _stacked(runs)
     queue = deque(accepted)
     while queue:
-        while queue:
-            i = queue.popleft()
-            for j in adj[i]:
-                if j not in accepted and _same_width(runs[i], runs[j]) and not _covered(runs[j], runs, accepted):
-                    size = accepted[i][0]
-                    accepted[j] = (size, "inferred" if size else "measured", "")
-                    queue.append(j)
-        for j in dict.fromkeys(j for i in accepted for j in adj[i]):
-            run = runs[j]
-            if (
-                j not in accepted
-                and j not in stacked
-                and round(run.weight, 2) in weights
-                and run.length >= max(24 * ppi, 3 * run.width)
-                and not _covered(run, runs, accepted)
-            ):
-                accepted[j] = (None, "measured", "")
-                queue.append(j)
+        _inherit_same_width(runs, adj, accepted, queue)
+        queue.extend(_admit_width_changes(runs, adj, accepted, ppi))
     return accepted
+
+
+def _inherit_same_width(runs: list[Run], adj: dict[int, list[int]], accepted: dict[int, tuple], queue: deque) -> None:
+    while queue:
+        i = queue.popleft()
+        for j in adj[i]:
+            if j not in accepted and _same_width(runs[i], runs[j]) and not _covered(runs[j], runs, accepted):
+                size = accepted[i][0]
+                accepted[j] = (size, "inferred" if size else "measured", "")
+                queue.append(j)
+
+
+def _admit_width_changes(runs: list[Run], adj: dict[int, list[int]], accepted: dict[int, tuple], ppi: float) -> list[int]:
+    """Connected runs of another width that look like the confirmed ductwork: same lineweight,
+    long enough, not a flex rib stack, not the gap between or a piece inside accepted ducts."""
+    weights = {round(runs[i].weight, 2) for i, (_, source, _) in accepted.items() if source == "label"}
+    stacked = _stacked(runs)
+    admitted = []
+    for j in dict.fromkeys(j for i in accepted for j in adj[i]):
+        run = runs[j]
+        if (
+            j not in accepted
+            and j not in stacked
+            and round(run.weight, 2) in weights
+            and run.length >= max(24 * ppi, 3 * run.width)
+            and not _covered(run, runs, accepted)
+        ):
+            accepted[j] = (None, "measured", "")
+            admitted.append(j)
+    return admitted
 
 
 def _same_width(a: Run, b: Run) -> bool:

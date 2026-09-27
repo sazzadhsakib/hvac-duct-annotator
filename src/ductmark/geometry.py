@@ -85,7 +85,11 @@ def pair_walls(
         )
         for r, j in zip(*np.nonzero(ok)):
             i = rows[r]
-            if _blocked(i, lo[r, j], hi[r, j], off[r, j], p0, p1, u, n, ang, min_gap, angle_tol, block_cover):
+            # Another wall strictly between the pair (liners hugging a wall excepted) blocks it.
+            side = off[r] * np.sign(off[r, j])
+            between = (side > min_gap) & (side < gap[r, j] - min_gap)
+            cover = np.minimum(hi[r, j], np.maximum(s0[r], s1[r])) - np.maximum(lo[r, j], np.minimum(s0[r], s1[r]))
+            if np.any(parallel[r] & between & (cover >= block_cover * (hi[r, j] - lo[r, j]))):
                 continue
             mid = off[r, j] / 2
             a = p0[i] + u[i] * lo[r, j] + n[i] * mid
@@ -182,17 +186,6 @@ def _combine(group: list[Run]) -> Run:
     width = np.average([r.width for r in group], weights=lengths)
     walls = frozenset().union(*(r.walls for r in group))
     return _run(origin + u * min(s) + n * off, origin + u * max(s) + n * off, width, max(r.weight for r in group), walls)
-
-
-def _blocked(i, lo, hi, off, p0, p1, u, n, ang, min_gap, angle_tol, block_cover) -> bool:
-    dang = np.abs(ang - ang[i])
-    parallel = np.minimum(dang, 180 - dang) <= angle_tol
-    rel0, rel1 = p0 - p0[i], p1 - p0[i]
-    k_off = ((rel0 + rel1) / 2 @ n[i]) * np.sign(off)
-    between = (k_off > min_gap) & (k_off < abs(off) - min_gap)
-    s0, s1 = rel0 @ u[i], rel1 @ u[i]
-    cover = np.minimum(hi, np.maximum(s0, s1)) - np.maximum(lo, np.minimum(s0, s1))
-    return bool(np.any(parallel & between & (cover >= block_cover * (hi - lo))))
 
 
 def _run(a, b, width: float, weight: float, walls) -> Run:
